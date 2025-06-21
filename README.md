@@ -1,16 +1,33 @@
-# cadastro_atores_filmes
+# 🎬 FavFilmes
 
-A new Flutter project.
+Aplicativo Flutter que consome a API da [TMDb (The Movie Database)](https://www.themoviedb.org/) para exibir filmes populares e permitir que usuários salvem seus favoritos localmente.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 🧠 Funcionalidades
 
-A few resources to get you started if this is your first Flutter project:
+- ✅ Lista de **filmes populares** da TMDb
+- ✅ Tela de **detalhes do filme**, com imagem grande e descrição
+- ✅ Ícone de ❤️ para **favoritar** filmes
+- ✅ Aba dedicada com **filmes favoritos**, salvos com `SharedPreferences`
+- ✅ Interface responsiva e com tema moderno
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🛠 Tecnologias Utilizadas
+
+- Flutter
+- Dart
+- HTTP
+- Shared Preferences (armazenamento local)
+- API TMDb
+
+---
+
+## 🔧 Como executar o projeto
+
+### 1. Clone o repositório
+
+```bash
+git clone https://github.com/Luisarabelo/FavFilmes.git
+cd FavFilmes
