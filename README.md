@@ -2,7 +2,7 @@
 
 Aplicativo Flutter que consome a API da [TMDb (The Movie Database)](https://www.themoviedb.org/) para exibir filmes populares e permitir que usuários salvem seus favoritos localmente.
 
----
+----
 
 ## 🧠 Funcionalidades
 
