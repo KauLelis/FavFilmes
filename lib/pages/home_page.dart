@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/movie.dart';
 import '../services/api_service.dart';
 import '../services/favorite_service.dart';
+import '../services/watch_later_service.dart';
 import '../widgets/movie_tile.dart';
 
 class HomePage extends StatefulWidget {
@@ -12,51 +13,130 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final apiService = ApiService();
-  final favoriteService = FavoriteService();
-  late Future<List<Movie>> popularMovies;
-  List<Movie> favoriteMovies = [];
+  final ApiService apiService = ApiService();
+  final FavoriteService favoriteService = FavoriteService();
+  final WatchLaterService watchLaterService = WatchLaterService();
 
   int currentIndex = 0;
+  late Future<List<Movie>> currentDisplayedMoviesFuture;
+
+  List<Movie> favoriteMovies = [];
+  List<Movie> watchLaterMovies = [];
+
+  String currentSearchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    currentDisplayedMoviesFuture = apiService.fetchPopularMovies();
+    loadFavorites();
+    loadWatchLater();
   }
 
-  void _loadData() {
-    popularMovies = apiService.getPopularMovies();
-    _loadFavorites();
+  Future<void> loadFavorites() async {
+    final favoriteIds = await favoriteService.getFavoriteIds();
+    List<Movie> fetchedFavorites = [];
+    for (int id in favoriteIds) {
+      try {
+        final movie = await apiService.fetchMovieDetails(id);
+        fetchedFavorites.add(movie);
+      } catch (e) {
+        print('Erro ao carregar filme favorito $id: $e');
+      }
+    }
+    if (mounted) {
+      setState(() {
+        favoriteMovies = fetchedFavorites;
+      });
+    }
   }
 
-  void _loadFavorites() async {
-    final all = await apiService.getPopularMovies();
-    final favIds = await favoriteService.getFavoriteIds();
-    setState(() {
-      favoriteMovies = all.where((m) => favIds.contains(m.id)).toList();
-    });
+  Future<void> loadWatchLater() async {
+    final watchLaterIds = await watchLaterService.getWatchLaterIds();
+    List<Movie> fetchedWatchLater = [];
+    for (int id in watchLaterIds) {
+      try {
+        final movie = await apiService.fetchMovieDetails(id);
+        fetchedWatchLater.add(movie);
+      } catch (e) {
+        print('Erro ao carregar filme para assistir depois $id: $e');
+      }
+    }
+    if (mounted) {
+      setState(() {
+        watchLaterMovies = fetchedWatchLater;
+      });
+    }
   }
 
-  void _toggleFavorite(Movie movie) async {
-    await favoriteService.toggleFavorite(movie.id);
-    _loadFavorites();
-    setState(() {});
+  void toggleFavoriteAndUpdateLists(int movieId) async {
+    await favoriteService.toggleFavorite(movieId);
+    await loadFavorites();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
-  Widget _buildMovieList(List<Movie> movies) {
+  Widget buildMovieList(Future<List<Movie>> moviesFuture) {
+    return FutureBuilder<List<Movie>>(
+      future: moviesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Erro: ${snapshot.error}'));
+        } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          final movies = snapshot.data!;
+          return ListView.builder(
+            padding: const EdgeInsets.all(8.0),
+            itemCount: movies.length,
+            itemBuilder: (context, index) {
+              final movie = movies[index];
+              return FutureBuilder<bool>(
+                future: favoriteService.isFavorite(movie.id),
+                builder: (context, favSnapshot) {
+                  final isFavorite = favSnapshot.data ?? false;
+                  return MovieTile(
+                    movie: movie,
+                    isFavorite: isFavorite,
+                    onFavoriteToggle: () => toggleFavoriteAndUpdateLists(movie.id),
+                  );
+                },
+              );
+            },
+          );
+        } else {
+          return Center(
+            child: Text(currentSearchQuery.isEmpty
+                ? 'Nenhum filme popular encontrado.'
+                : 'Nenhum filme encontrado para "${currentSearchQuery}".'),
+          );
+        }
+      },
+    );
+  }
+
+  Widget buildListFromMovies(List<Movie> movies) {
+    if (movies.isEmpty) {
+      return Center(
+        child: Text(currentIndex == 1
+            ? 'Nenhum filme favorito encontrado.'
+            : 'Nenhum filme para assistir depois encontrado.'),
+      );
+    }
     return ListView.builder(
+      padding: const EdgeInsets.all(8.0),
       itemCount: movies.length,
       itemBuilder: (context, index) {
         final movie = movies[index];
         return FutureBuilder<bool>(
           future: favoriteService.isFavorite(movie.id),
           builder: (context, snapshot) {
-            final isFav = snapshot.data ?? false;
+            final isFavorite = snapshot.data ?? false;
             return MovieTile(
               movie: movie,
-              isFavorite: isFav,
-              onFavoriteToggle: () => _toggleFavorite(movie),
+              isFavorite: isFavorite,
+              onFavoriteToggle: () => toggleFavoriteAndUpdateLists(movie.id),
             );
           },
         );
@@ -68,28 +148,60 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(currentIndex == 0 ? 'Filmes Populares' : 'Favoritos'),
+        title: currentIndex == 0
+            ? TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Buscar filmes...',
+                  hintStyle: TextStyle(color: Colors.black),
+                  border: InputBorder.none,
+                  prefixIcon: Icon(Icons.search, color: Colors.black),
+                ),
+                style: const TextStyle(color: Colors.black, fontSize: 18),
+                cursorColor: Colors.black,
+                onSubmitted: (query) {
+                  setState(() {
+                    currentSearchQuery = query;
+                    currentDisplayedMoviesFuture = apiService.searchMovies(query);
+                  });
+                },
+              )
+            : currentIndex == 1
+                ? const Text('Favoritos')
+                : const Text('Assistir depois'),
       ),
       body: currentIndex == 0
-          ? FutureBuilder<List<Movie>>(
-              future: popularMovies,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                } else if (snapshot.hasError) {
-                  return Center(child: Text('Erro: ${snapshot.error}'));
-                } else {
-                  return _buildMovieList(snapshot.data!);
-                }
-              },
-            )
-          : _buildMovieList(favoriteMovies),
+          ? buildMovieList(currentDisplayedMoviesFuture)
+          : currentIndex == 1
+              ? buildListFromMovies(favoriteMovies)
+              : buildListFromMovies(watchLaterMovies),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
-        onTap: (i) => setState(() => currentIndex = i),
+        onTap: (index) {
+          setState(() {
+            currentIndex = index;
+            if (index == 0) {
+              currentDisplayedMoviesFuture = apiService.fetchPopularMovies();
+              currentSearchQuery = '';
+            } else if (index == 1) {
+              loadFavorites();
+            } else if (index == 2) {
+              loadWatchLater();
+            }
+          });
+        },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.movie), label: 'Populares'),
-          BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Favoritos'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.movie),
+            label: 'Populares',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.favorite),
+            label: 'Favoritos',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.watch_later),
+            label: 'Assistir depois',
+          ),
         ],
       ),
     );
